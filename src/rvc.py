@@ -109,6 +109,8 @@ class Config:
 
 def load_hubert(device, is_half, model_path):
     from fairseq import checkpoint_utils
+    import fairseq
+    torch.serialization.add_safe_globals([fairseq.data.dictionary.Dictionary])
 
     models, saved_cfg, task = checkpoint_utils.load_model_ensemble_and_task([model_path], suffix='', )
     hubert = models[0]
