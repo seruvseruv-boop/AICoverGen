@@ -298,7 +298,7 @@ def combine_audio(audio_paths, output_path, main_gain, backup_gain, inst_gain, o
 
 
 # @spaces.GPU(enable_queue=True, duration=130)
-@spaces.GPU(duration=59)
+@spaces.GPU(duration=65)
 def process_song(
     song_dir, song_input, mdx_model_params, song_id, is_webui, input_type, progress,
     keep_files, pitch_change, pitch_change_all, voice_model, index_rate, filter_radius,
@@ -318,6 +318,24 @@ def process_song(
         else:
             orig_song_path, instrumentals_path, main_vocals_dereverb_path, backup_vocals_path = paths
 
+    ins_path = get_audio_with_suffix(song_dir, "_Voiceless.wav")
+    if not ins_path:
+        display_progress('[~] Extracting voiceless track...', 0.4, is_webui, progress)
+        instrumentals_path, _ = run_mdx(
+            mdx_model_params,
+            song_dir,
+            os.path.join(mdxnet_models_dir, "UVR-MDX-NET-Inst_HQ_4.onnx"),
+            instrumentals_path,
+            exclude_inversion=True,
+            suffix="Voiceless",
+            denoise=False,
+            keep_orig=True,
+            base_device=("cuda" if IS_ZERO_GPU else "")
+        )
+        ins_path = get_audio_with_suffix(song_dir, "_Voiceless.wav")
+    else:
+        instrumentals_path = ins_path
+
     pitch_change = pitch_change * 12 + pitch_change_all
     ai_vocals_path = os.path.join(song_dir, f'{os.path.splitext(os.path.basename(orig_song_path))[0]}_{voice_model}_p{pitch_change}_i{index_rate}_fr{filter_radius}_rms{rms_mix_rate}_pro{protect}_{f0_method}{"" if f0_method != "mangio-crepe" else f"_{crepe_hop_length}"}_s{steps}.wav')
     ai_cover_path = os.path.join(song_dir, f'{os.path.splitext(os.path.basename(orig_song_path))[0]} ({voice_model} Ver).{output_format}')
@@ -326,7 +344,7 @@ def process_song(
         display_progress('[~] Converting voice using RVC...', 0.5, is_webui, progress)
         voice_change(voice_model, main_vocals_dereverb_path, ai_vocals_path, pitch_change, f0_method, index_rate, filter_radius, rms_mix_rate, protect, crepe_hop_length, is_webui, steps)
 
-    return ai_vocals_path, ai_cover_path, instrumentals_path, backup_vocals_path, vocals_path, main_vocals_path
+    return ai_vocals_path, ai_cover_path, instrumentals_path, backup_vocals_path, vocals_path, main_vocals_path, ins_path
 
 
 def apply_noisereduce(audio_list, type_output="wav"):
@@ -420,7 +438,8 @@ def song_cover_pipeline(song_input, voice_model, pitch_change, keep_files,
             instrumentals_path,
             backup_vocals_path,
             vocals_path,
-            main_vocals_path
+            main_vocals_path,
+            ins_path
         ) = process_song(
             song_dir,
             song_input,
@@ -458,21 +477,6 @@ def song_cover_pipeline(song_input, voice_model, pitch_change, keep_files,
             ai_vocals_path = apply_noisereduce([ai_vocals_path])[0]
 
         ai_vocals_mixed_path = add_audio_effects(ai_vocals_path, reverb_rm_size, reverb_wet, reverb_dry, reverb_damping)
-
-        ins_path = get_audio_with_suffix(song_dir, "_Voiceless.wav")
-        if not ins_path:
-            instrumentals_path, _ = run_mdx(
-                mdx_model_params,
-                os.path.join(output_dir, song_id),
-                os.path.join(mdxnet_models_dir, "UVR-MDX-NET-Inst_HQ_4.onnx"),
-                instrumentals_path,
-                # exclude_main=False,
-                exclude_inversion=True,
-                suffix="Voiceless",
-                denoise=False,
-                keep_orig=True,
-                base_device=("" if IS_ZERO_GPU else "cuda")
-            )
         
         if pitch_change_all != 0:
             display_progress('[~] Applying overall pitch change', 0.85, is_webui, progress)
@@ -484,11 +488,11 @@ def song_cover_pipeline(song_input, voice_model, pitch_change, keep_files,
 
         if not keep_files:
             display_progress('[~] Removing intermediate audio files...', 0.95, is_webui, progress)
-            intermediate_files = [vocals_path, main_vocals_path, ai_vocals_mixed_path, ins_path, nr_path]
+            intermediate_files = [vocals_path, main_vocals_path, ai_vocals_mixed_path, nr_path]
             if pitch_change_all != 0:
                 intermediate_files += [instrumentals_path, backup_vocals_path]
             for file in intermediate_files:
-                if file and os.path.exists(file):
+                if file and os.path.exists(file) and file != ins_path:
                     os.remove(file)
 
         return ai_cover_path
