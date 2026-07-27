@@ -247,7 +247,7 @@ def get_audio_file(song_input, is_webui, input_type, progress):
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 compute_half = True if torch.cuda.is_available() else False
 config = Config(device, compute_half)
-hubert_model = load_hubert("cuda", config.is_half, os.path.join(rvc_models_dir, 'hubert_base.pt'))
+hubert_model = load_hubert("cuda", config.is_half, None)
 print(device, "half>>", config.is_half)
 
 # @spaces.GPU(enable_queue=True)
