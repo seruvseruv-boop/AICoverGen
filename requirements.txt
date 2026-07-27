@@ -2,20 +2,19 @@ torch==2.9.1
 torchvision==0.24.1
 torchaudio==2.9.1
 deemix
-fairseq==0.12.2
-faiss-cpu==1.7.3
+faiss-cpu==1.9.0
 ffmpeg-python>=0.2.0
-gradio==5.44.0
+gradio==6.20.0
 lib==4.0.0
 librosa==0.9.1
-numpy==1.23.5
+numpy==1.26.4
 onnxruntime-gpu==1.22.0 # onnxruntime #onnxruntime_gpu
 praat-parselmouth>=0.4.2
-pedalboard==0.7.7
+pedalboard==0.9.24
 pydub==0.25.1
 pyworld==0.3.4
 Requests==2.31.0
-scipy==1.11.1
+scipy==1.11.3
 soundfile==0.12.1
 torchcrepe==0.0.20
 tqdm==4.65.0
@@ -24,3 +23,5 @@ sox==1.4.1
 noisereduce
 spaces
 matplotlib-inline
+transformers==5.13.1
+soxr==1.1.0
