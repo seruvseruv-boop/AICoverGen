@@ -10,6 +10,9 @@ from infer_pack.models import (
 )
 from my_utils import load_audio
 from vc_infer_pipeline import VC
+import os
+import torch.nn as nn
+from transformers import HubertConfig, HubertModel
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -107,16 +110,55 @@ class Config:
         return x_pad, x_query, x_center, x_max
 
 
-def load_hubert(device, is_half, model_path):
-    from fairseq import checkpoint_utils
-    import fairseq
-    torch.serialization.add_safe_globals([fairseq.data.dictionary.Dictionary])
+class HubertModelWithFinalProj(HubertModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.final_proj = nn.Linear(config.hidden_size, config.classifier_proj_size)
 
-    models, saved_cfg, task = checkpoint_utils.load_model_ensemble_and_task([model_path], suffix='', )
-    hubert = models[0]
+
+class FairseqHubertWrapper(nn.Module):
+    def __init__(self, model_path_or_name="r3gm/hubert_base"):
+        super().__init__()
+        try:
+            self.model = HubertModelWithFinalProj.from_pretrained(model_path_or_name)
+        except Exception:
+            self.model = HubertModel.from_pretrained(model_path_or_name)
+
+    def extract_features(self, source, padding_mask=None, output_layer=12, **kwargs):
+        param_dtype = next(self.model.parameters()).dtype
+        if source.dtype != param_dtype:
+            source = source.to(param_dtype)
+
+        if source.dim() == 1:
+            source = source.unsqueeze(0)
+
+        with torch.no_grad():
+            outputs = self.model(source, output_hidden_states=True)
+
+        # 9 for v1, 12 for v2/ContentVec
+        if output_layer is None or output_layer >= len(outputs.hidden_states):
+            hidden_state = outputs.hidden_states[-1]
+        else:
+            hidden_state = outputs.hidden_states[output_layer]
+
+        return (hidden_state, None)
+
+    def final_proj(self, x):
+        if hasattr(self.model, "final_proj"):
+            return self.model.final_proj(x)
+        return x
+
+
+def load_hubert(device, is_half, model_path=None):
+    if model_path and (os.path.exists(model_path) or os.path.isdir(model_path)):
+        target_path = model_path
+    else:
+        target_path = "r3gm/hubert_base"
+
+    hubert = FairseqHubertWrapper(target_path)
     hubert = hubert.to(device)
 
-    if is_half:
+    if is_half and torch.device(device).type != "cpu":
         hubert = hubert.half()
     else:
         hubert = hubert.float()
