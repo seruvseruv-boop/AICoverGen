@@ -25,6 +25,7 @@ def configure_logging_libs(debug=False):
 configure_logging_libs()
 
 from main import song_cover_pipeline, yt_download
+from sec_utils import validate_url, check_model_safety
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IS_ZERO_GPU = os.getenv("SPACES_ZERO_GPU")
@@ -57,6 +58,8 @@ def load_public_models():
 
 
 def extract_zip(extraction_folder, zip_name):
+    check_model_safety(zip_name)
+
     os.makedirs(extraction_folder)
     with zipfile.ZipFile(zip_name, 'r') as zip_ref:
         zip_ref.extractall(extraction_folder)
@@ -70,6 +73,7 @@ def extract_zip(extraction_folder, zip_name):
 
             if name.endswith('.pth') and os.stat(os.path.join(root, name)).st_size > 1024 * 1024 * 40:
                 model_filepath = os.path.join(root, name)
+                check_model_safety(model_filepath)
 
     if not model_filepath:
         raise gr.Error(f'No .pth model file was found in the extracted zip. Please check {extraction_folder}.')
@@ -96,9 +100,8 @@ def download_online_model(url, dir_name, progress=gr.Progress()):
         if 'pixeldrain.com' in url:
             url = f'https://pixeldrain.com/api/file/{zip_name}'
 
-        
         if "," in url:
-            urls = [u.strip() for u in url.split(",") if u.strip()]
+            urls = [validate_url(u.strip()) for u in url.split(",") if u.strip()]
             os.makedirs(extraction_folder, exist_ok=True)
             for u in urls:
                 u = u.replace("?download=true", "")
@@ -106,19 +109,26 @@ def download_online_model(url, dir_name, progress=gr.Progress()):
                 file_path = os.path.join(extraction_folder, file_name)
                 if not os.path.exists(file_path):  # avoid re-downloading
                     urllib.request.urlretrieve(u, file_path)
+                    check_model_safety(file_path)
         else:
+            url = validate_url(url)
             urllib.request.urlretrieve(url, zip_name)
 
             progress(0.5, desc='[~] Extracting zip...')
             extract_zip(extraction_folder, zip_name)
+
         return f'[+] {dir_name} Model successfully downloaded!'
 
     except Exception as e:
-        raise gr.Error(str(e))
-
+        str_e = str(e)
+        if 'HTTP Error 401: Unauthorized' in str_e:
+            raise gr.Error(f'{str_e}: The file at the provided URL does not exist, is private, or has been deleted. Please verify the link.')
+        raise gr.Error(str_e)
 
 def upload_local_model(zip_path, dir_name, progress=gr.Progress()):
     try:
+        check_model_safety(zip_path)
+
         extraction_folder = os.path.join(rvc_models_dir, dir_name)
         if os.path.exists(extraction_folder):
             raise gr.Error(f'Voice model directory {dir_name} already exists! Choose a different name for your voice model.')
@@ -181,6 +191,10 @@ def show_hop_slider(pitch_detection_algo):
         return gr.update(visible=True)
     else:
         return gr.update(visible=False)
+
+
+def update_audio_player(is_player_active, audio_path):
+    return gr.update(value=audio_path if is_player_active else None, visible=True if is_player_active else False)
 
 
 if __name__ == '__main__':
@@ -284,11 +298,12 @@ if __name__ == '__main__':
             with gr.Row():
                 clear_btn = gr.ClearButton(value='Clear', components=[song_input, rvc_model, keep_files, local_file])
                 generate_btn = gr.Button("Generate", variant='primary')
-                ai_cover = (
-                    gr.Audio(label='AI Cover', show_share_button=True)
-                    if args.builtin_player else
-                    gr.File(label="AI Cover", interactive=False)
-                )
+                ai_cover = gr.File(label="AI Cover", interactive=False)
+
+            with gr.Row():
+                audio_player_checkbox = gr.Checkbox(label="Audio Player", value=False, container=False, scale=1)
+                ai_cover_audio = gr.Audio(label="AI Cover Player", value=None, visible=False, scale=4)
+
             gr.Markdown("- You can also try `AICoverGen❤️` in Colab’s free tier, which provides free GPU [link](https://github.com/R3gm/AICoverGen?tab=readme-ov-file#aicovergen).")
 
             ref_btn.click(update_models_list, None, outputs=rvc_model)
@@ -298,7 +313,9 @@ if __name__ == '__main__':
                                        inst_gain, index_rate, filter_radius, rms_mix_rate, f0_method, crepe_hop_length,
                                        protect, pitch_all, reverb_rm_size, reverb_wet, reverb_dry, reverb_damping,
                                        output_format, extra_denoise, steps],
-                               outputs=[ai_cover])
+                               outputs=[ai_cover]).success(update_audio_player,
+                                                           inputs=[audio_player_checkbox, ai_cover],
+                                                           outputs=[ai_cover_audio])
             clear_btn.click(lambda: [0, 0, 0, 0, 0.5, 3, 0.25, 0.33, 'rmvpe+', 128, 0, 0.15, 0.2, 0.8, 0.7, 'mp3', None, True, 1],
                             outputs=[pitch, main_gain, backup_gain, inst_gain, index_rate, filter_radius, rms_mix_rate,
                                      protect, f0_method, crepe_hop_length, pitch_all, reverb_rm_size, reverb_wet,
