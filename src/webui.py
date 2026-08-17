@@ -193,6 +193,10 @@ def show_hop_slider(pitch_detection_algo):
         return gr.update(visible=False)
 
 
+def clear_player():
+    return None
+
+
 def update_audio_player(is_player_active, audio_path):
     return gr.update(value=audio_path if is_player_active else None, visible=True if is_player_active else False)
 
@@ -313,9 +317,11 @@ if __name__ == '__main__':
                                        inst_gain, index_rate, filter_radius, rms_mix_rate, f0_method, crepe_hop_length,
                                        protect, pitch_all, reverb_rm_size, reverb_wet, reverb_dry, reverb_damping,
                                        output_format, extra_denoise, steps],
-                               outputs=[ai_cover]).success(update_audio_player,
-                                                           inputs=[audio_player_checkbox, ai_cover],
-                                                           outputs=[ai_cover_audio])
+                               outputs=[ai_cover]).success(clear_player,
+                                                           outputs=[ai_cover_audio]
+                               ).success(update_audio_player,
+                                         inputs=[audio_player_checkbox, ai_cover],
+                                         outputs=[ai_cover_audio])
             clear_btn.click(lambda: [0, 0, 0, 0, 0.5, 3, 0.25, 0.33, 'rmvpe+', 128, 0, 0.15, 0.2, 0.8, 0.7, 'mp3', None, True, 1],
                             outputs=[pitch, main_gain, backup_gain, inst_gain, index_rate, filter_radius, rms_mix_rate,
                                      protect, f0_method, crepe_hop_length, pitch_all, reverb_rm_size, reverb_wet,
