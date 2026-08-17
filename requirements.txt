@@ -25,3 +25,4 @@ spaces
 matplotlib-inline
 transformers==5.13.1
 soxr==1.1.0
+picklescan
