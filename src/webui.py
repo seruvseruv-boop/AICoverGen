@@ -4,7 +4,15 @@ import shutil
 import urllib.request
 import zipfile
 from argparse import ArgumentParser
-import spaces
+try:
+    import spaces
+except ImportError:
+    class _MockSpaces:
+        def GPU(self, *args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
+    spaces = _MockSpaces()
 import gradio as gr
 import logging
 def configure_logging_libs(debug=False):
@@ -216,21 +224,9 @@ if __name__ == '__main__':
     with open(os.path.join(rvc_models_dir, 'public_models.json'), encoding='utf8') as infile:
         public_models = json.load(infile)
 
-    with gr.Blocks(title='AICoverGenWebUI', theme=args.theme, fill_width=True, fill_height=False) as app:
+    with gr.Blocks(title='AICoverGen WebUI', theme=args.theme, fill_width=True, fill_height=False) as app:
 
-        gr.Label(f'AICoverGen WebUI {"ZeroGPU mode" if IS_ZERO_GPU else ""} created with ❤️', show_label=False)
-        if IS_ZERO_GPU:
-            gr.Markdown(
-                """
-                <details>
-                    <summary style="font-size: 1.5em;">⚠️ Important (click to expand)</summary>
-                    <ul>
-                        <li>🚀 This demo use a Zero GPU, which is available only for a limited time. It's recommended to use audio files that are no longer than 5 minutes. If you want to use it without time restrictions, you can duplicate the 'old CPU space'. ⏳</li>
-                    </ul>
-                </details>
-                """
-            )
-            gr.Markdown("Duplicate the old CPU space for use in private: [![Duplicate this Space](https://huggingface.co/datasets/huggingface/badges/raw/main/duplicate-this-space-sm-dark.svg)](https://huggingface.co/spaces/r3gm/AICoverGen_old_stable_cpu?duplicate=true)\n\n") 
+        gr.Label('AICoverGen WebUI (Colab & Kaggle Edition) - RMVPE+, UVR, Denoise & Clean Minus', show_label=False) 
 
         # main tab
         with gr.Tab("Generate"):
@@ -265,10 +261,10 @@ if __name__ == '__main__':
                     show_file_upload_button.click(swap_visibility, outputs=[file_upload_col, yt_link_col, song_input, local_file])
                     show_yt_link_button.click(swap_visibility, outputs=[yt_link_col, file_upload_col, song_input, local_file])
 
-            with gr.Accordion('Voice conversion options', open=False):
+            with gr.Accordion('Voice conversion options (RMVPE+, Denoise, Filter Radius)', open=True):
                 with gr.Row():
-                    index_rate = gr.Slider(0, 1, value=0.5, label='Index Rate', info="Controls how much of the AI voice's accent to keep in the vocals")
-                    filter_radius = gr.Slider(0, 7, value=3, step=1, label='Filter radius', info='If >=3: apply median filtering median filtering to the harvested pitch results. Can reduce breathiness')
+                    index_rate = gr.Slider(0, 1, value=0.75, label='Index Rate', info="Controls how much of the AI voice's accent to keep in the vocals")
+                    filter_radius = gr.Slider(0, 7, value=3, step=1, label='Filter radius', info='If >=3: apply median filtering to the harvested pitch results. Can reduce breathiness')
                     rms_mix_rate = gr.Slider(0, 1, value=0.25, label='RMS mix rate', info="Control how much to mimic the original vocal's loudness (0) or a fixed loudness (1)")
                     protect = gr.Slider(0, 0.5, value=0.33, label='Protect rate', info='Protect voiceless consonants and breath sounds. Set to 0.5 to disable.')
                     with gr.Column():
@@ -282,11 +278,11 @@ if __name__ == '__main__':
                         extra_denoise = gr.Checkbox(True, label='Denoise', info='Apply an additional noise reduction step to clean up the audio further.')
                         keep_files = gr.Checkbox((False if IS_ZERO_GPU else True), label='Keep intermediate files', info='Keep all audio files generated in the song_output/id directory, e.g. Isolated Vocals/Instrumentals. Leave unchecked to save space', interactive=(False if IS_ZERO_GPU else True))
 
-            with gr.Accordion('Audio mixing options', open=False):
+            with gr.Accordion('Audio mixing options (Clean Minus & Reverb)', open=True):
                 gr.Markdown('### Volume Change (decibels)')
                 with gr.Row():
                     main_gain = gr.Slider(-20, 20, value=0, step=1, label='Main Vocals')
-                    backup_gain = gr.Slider(-20, 20, value=0, step=1, label='Backup Vocals')
+                    backup_gain = gr.Slider(-20, 20, value=-20, step=1, label='Backup Vocals', info='Set to -20 for 100% clean instrumental without backing vocals')
                     inst_gain = gr.Slider(-20, 20, value=0, step=1, label='Music')
 
                 gr.Markdown('### Reverb Control on AI Vocals')
@@ -297,7 +293,7 @@ if __name__ == '__main__':
                     reverb_damping = gr.Slider(0, 1, value=0.7, label='Damping level', info='Absorption of high frequencies in the reverb')
 
                 gr.Markdown('### Audio Output Format')
-                output_format = gr.Dropdown(['mp3', 'wav'], value='mp3', label='Output file type', info='mp3: small file size, decent quality. wav: Large file size, best quality')
+                output_format = gr.Dropdown(['mp3', 'wav'], value='wav', label='Output file type', info='mp3: small file size, decent quality. wav: Large file size, best quality')
 
             with gr.Row():
                 clear_btn = gr.ClearButton(value='Clear', components=[song_input, rvc_model, keep_files, local_file])

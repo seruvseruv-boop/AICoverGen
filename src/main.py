@@ -1,4 +1,12 @@
-import spaces
+try:
+    import spaces
+except ImportError:
+    class _MockSpaces:
+        def GPU(self, *args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
+    spaces = _MockSpaces()
 import torch
 import argparse
 import gc
@@ -292,9 +300,13 @@ def add_audio_effects(audio_path, reverb_rm_size, reverb_wet, reverb_dry, reverb
 
 def combine_audio(audio_paths, output_path, main_gain, backup_gain, inst_gain, output_format):
     main_vocal_audio = AudioSegment.from_wav(audio_paths[0]) - 4 + main_gain
-    backup_vocal_audio = AudioSegment.from_wav(audio_paths[1]) - 6 + backup_gain
-    instrumental_audio = AudioSegment.from_wav(audio_paths[2]) - 7 + inst_gain
-    main_vocal_audio.overlay(backup_vocal_audio).overlay(instrumental_audio).export(output_path, format=output_format)
+    if backup_gain <= -20:
+        # 100% clean instrumental: completely omit backup vocals
+        main_vocal_audio.overlay(AudioSegment.from_wav(audio_paths[2]) - 7 + inst_gain).export(output_path, format=output_format)
+    else:
+        backup_vocal_audio = AudioSegment.from_wav(audio_paths[1]) - 6 + backup_gain
+        instrumental_audio = AudioSegment.from_wav(audio_paths[2]) - 7 + inst_gain
+        main_vocal_audio.overlay(backup_vocal_audio).overlay(instrumental_audio).export(output_path, format=output_format)
 
 
 # @spaces.GPU(enable_queue=True, duration=130)
